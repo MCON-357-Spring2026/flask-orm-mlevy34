@@ -26,21 +26,19 @@ def create_student(name: str, email: str) -> Student:
     db.session.add(student)
     try:
         db.session.commit()
-    except Exception as ex:
+    except IntegrityError:  # fixed: catch only IntegrityError
         db.session.rollback()
-        raise ValueError("Duplicate Emails are not accepted")
-
+        raise ValueError("duplicate email")  # fixed message format
+    return student
 
 
 def find_student_by_email(email: str) -> Optional[Student]:
     """TODO: Return Student by email or None."""
-    student = Student.query.filter_by(email="ava@example.com").first()
+    student = Student.query.filter_by(email=email).first()
     if not student:
         return None
     else:
-        return Optional[student]
-
-
+        return student
 
 
 def add_grade(student_id: int, assignment_id: int, score: int) -> Grade:
@@ -60,10 +58,10 @@ def add_grade(student_id: int, assignment_id: int, score: int) -> Grade:
     db.session.add(grade)
     try:
         db.session.commit()
-    except Exception as ex:
-        db.rollback()
-        raise ValueError("Duplicate Grades are not accepted")
-
+    except IntegrityError:  
+        db.session.rollback()
+        raise ValueError("duplicate grade")
+    return grade
 
 def average_percent(student_id: int) -> float:
     """TODO: Return student's average percent across assignments.
@@ -74,6 +72,8 @@ def average_percent(student_id: int) -> float:
     If student has no grades: return 0.0
     """
     student = db.session.get(Student, student_id)
+    if not student:
+        raise LookupError("Student not found")
     avg_expr = func.avg(Grade.score * 100.0 / Assignment.max_points)
     result = (
         db.session.query(avg_expr)
@@ -83,6 +83,7 @@ def average_percent(student_id: int) -> float:
         .scalar()
     )
     return float(result) if result is not None else 0.0
+
 
 # ===== QUERYING & FILTERING =====
 
@@ -112,6 +113,7 @@ def get_student_grades(student_id: int) -> list[Grade]:
         Grade.query.join(Assignment)
         .filter(Grade.student_id == student_id)
         .order_by(Assignment.title)
+        .all()
     )
 
 
@@ -127,6 +129,7 @@ def get_grades_for_assignment(assignment_id: int) -> list[Grade]:
         Grade.query.join(Student)
         .filter(Grade.assignment_id == assignment_id)
         .order_by(Student.name)
+        .all()
     )
 
 
@@ -147,13 +150,11 @@ def highest_score_on_assignment(assignment_id: int) -> Optional[int]:
     if not a:
         raise LookupError("Assignment not found")
     highest = (
-            db.session.query(db.func.max(Grade.score))
-               .filter(Grade.assignment_id == assignment_id)
-               .scalar()
-               )
+        db.session.query(db.func.max(Grade.score))
+        .filter(Grade.assignment_id == assignment_id)
+        .scalar()
+    )
     return highest
-
-
 
 
 def class_average_percent() -> float:
@@ -163,8 +164,11 @@ def class_average_percent() -> float:
     Return average of all these percents.
     If no grades: return 0.0
     """
-    avg = (db.session.query(db.func.avg((Grade.score/Assignment.max_points) *100))
-           .join(Assignment, Grade.assignment_id == Assignment.id)).scalar()
+    avg = (
+        db.session.query(db.func.avg((Grade.score / Assignment.max_points) * 100))
+        .join(Assignment, Grade.assignment_id == Assignment.id)
+        .scalar()
+    )
     if not avg:
         return 0.0
     return avg
@@ -178,11 +182,12 @@ def student_grade_count(student_id: int) -> int:
     s = db.session.get(Student, student_id)
     if not s:
         raise LookupError("Student not found")
-    count = (db.session.query(db.func.count(Grade.score))
-             .filter(Grade.student_id == student_id)
-             .scalar())
+    count = (
+        db.session.query(db.func.count(Grade.score))
+        .filter(Grade.student_id == student_id)
+        .scalar()
+    )
     return count
-
 
 
 # ===== UPDATING & DELETION =====
@@ -200,7 +205,7 @@ def update_student_email(student_id: int, new_email: str) -> Student:
     student.email = new_email
     try:
         db.session.commit()
-    except Exception as ex:
+    except IntegrityError:  # fixed: catch IntegrityError
         db.session.rollback()
         raise ValueError("duplicate email")
     return student
@@ -267,12 +272,10 @@ def assignments_without_grades() -> list[Assignment]:
     """TODO: Return assignments that have no grades yet, ordered by title."""
     result = []
     for assignment in Assignment.query.all():
-        if not assignmentment.grades:
+        if not assignment.grades:  # fixed typo
             result.append((assignment, assignment.title))
     result = sorted(result, key=lambda x: x[1])
     return [r[0] for r in result]
-
-
 
 
 def top_scorer_on_assignment(assignment_id: int) -> Optional[Student]:
